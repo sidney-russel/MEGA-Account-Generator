@@ -1,17 +1,12 @@
-
 import csv
 import os
 import threading
 import logging
-
 import sys
 
 def get_app_path():
     """Get the absolute path to the application directory."""
     if getattr(sys, 'frozen', False):
-        # If the application is run as a bundle, the PyInstaller bootloader
-        # extends the sys module by a flag frozen=True and sets the app 
-        # path into variable _MEIPASS'.
         return os.path.dirname(sys.executable)
     else:
         return os.path.dirname(os.path.abspath(__file__))
@@ -32,7 +27,60 @@ def initialize_csv():
 
 def csv_exists():
     """Check if the CSV file exists."""
-    return os.path.exists(CSV_FILE)
+    with lock:
+        return os.path.exists(CSV_FILE)
+
+def _read_rows():
+    """Read rows from CSV. Caller MUST hold the lock."""
+    rows = []
+    try:
+        try:
+            with open(CSV_FILE, "r", encoding='utf-8') as f:
+                rows = list(csv.reader(f))
+        except UnicodeDecodeError:
+            with open(CSV_FILE, "r", encoding='latin-1') as f:
+                rows = list(csv.reader(f))
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        logging.error(f"Error reading CSV: {e}")
+        return []
+
+    if not rows:
+        return []
+
+    data_rows = []
+    if rows[0] and "email" in rows[0][0].lower():
+        data_rows = rows[1:]
+    else:
+        data_rows = rows
+
+    normalized_rows = []
+    for row in data_rows:
+        if not row:
+            continue
+        
+        if len(row) == 7:
+            row.insert(5, "")
+        
+        while len(row) < 8:
+            row.append("")
+            
+        normalized_rows.append(row)
+
+    return normalized_rows
+
+def _write_rows(rows):
+    """Write rows to CSV. Caller MUST hold the lock."""
+    try:
+        with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(HEADER)
+            writer.writerows(rows)
+        return True
+    except Exception as e:
+        logging.error(f"Error writing CSV: {e}")
+        return False
 
 def read_accounts():
     """
@@ -41,46 +89,8 @@ def read_accounts():
     Returns a list of rows (lists).
     """
     initialize_csv()
-    rows = []
-    
     with lock:
-        try:
-            try:
-                with open(CSV_FILE, "r", encoding='utf-8') as f:
-                    rows = list(csv.reader(f))
-            except UnicodeDecodeError:
-                with open(CSV_FILE, "r", encoding='latin-1') as f:
-                    rows = list(csv.reader(f))
-        except Exception as e:
-            logging.error(f"Error reading CSV: {e}")
-            return []
-
-    if not rows:
-        return []
-
-    # Skip header
-    data_rows = []
-    if "email" in rows[0][0].lower():
-        data_rows = rows[1:]
-    else:
-        data_rows = rows
-
-    normalized_rows = []
-    for row in data_rows:
-        if not row: continue
-        
-        # Normalize to 8 columns
-        if len(row) == 7:
-            # Legacy format: Insert empty Tags at index 5
-            row.insert(5, "")
-        
-        # Ensure at least 8 columns by appending empty strings if needed
-        while len(row) < 8:
-            row.append("")
-            
-        normalized_rows.append(row)
-
-    return normalized_rows
+        return _read_rows()
 
 def write_accounts(rows):
     """
@@ -89,15 +99,7 @@ def write_accounts(rows):
         rows: List of rows (lists). Header is NOT expected in input rows.
     """
     with lock:
-        try:
-            with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(HEADER)
-                writer.writerows(rows)
-            return True
-        except Exception as e:
-            logging.error(f"Error writing CSV: {e}")
-            return False
+        return _write_rows(rows)
 
 def append_account(row):
     """
@@ -107,11 +109,10 @@ def append_account(row):
     """
     initialize_csv()
     
-    # Normalize before writing
     while len(row) < 8:
         row.append("")
     if len(row) > 8:
-         row = row[:8] # Truncate if too long? Or just let it be. Stick to 8 for now.
+        row = row[:8]
 
     with lock:
         try:
@@ -125,38 +126,40 @@ def append_account(row):
 
 def update_account(email, col_index, new_value):
     """
-    Update a specific cell for a specific account.
-    Args:
-        email: The email to identify the row.
-        col_index: The index of the column to update.
-        new_value: The new value to set.
+    Atomically update a specific cell for a specific account.
+    Uses a single lock acquisition for the entire read-modify-write cycle.
     """
-    # Read all (which handles locking)
-    # We do a read-modify-write cycle, so we need to be careful about race conditions 
-    # if we define granularity at function level. 
-    # For simplicity, we just use the global lock here for the whole operation manually
-    # by using read_accounts (which locks) then write_accounts (which locks). 
-    # This is slightly inefficient but safe enough for this app.
-    
-    # Actually, to be truly atomic, we should lock the whole block.
-    # But read_accounts takes the lock. So we will just read, modify memory, write.
-    # The lock in read/write functions prevents corruption of the FILE, not the data logic.
-    # Since this is a single user desktop app, this is acceptable.
-    
-    rows = read_accounts()
-    updated = False
-    for row in rows:
-        if row[0] == email:
-            if len(row) > col_index:
-                row[col_index] = new_value
-                updated = True
-                break
-    
-    if updated:
-        return write_accounts(rows)
-    return False
+    with lock:
+        rows = _read_rows()
+        updated = False
+        for row in rows:
+            if row[0] == email:
+                if len(row) > col_index:
+                    row[col_index] = new_value
+                    updated = True
+                    break
+        
+        if updated:
+            return _write_rows(rows)
+        return False
 
 def count_accounts():
     """Return the number of accounts in the CSV (excluding header)."""
-    rows = read_accounts()
-    return len(rows)
+    with lock:
+        rows = _read_rows()
+        return len(rows)
+
+def email_exists(email):
+    """Check if an email already exists in the CSV (thread-safe, O(n))."""
+    with lock:
+        rows = _read_rows()
+        for row in rows:
+            if row[0] == email:
+                return True
+        return False
+
+def get_existing_emails():
+    """Get a set of all existing emails (thread-safe)."""
+    with lock:
+        rows = _read_rows()
+        return {row[0] for row in rows}

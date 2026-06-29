@@ -2,7 +2,6 @@
 Tag Manager Module for MEGA Account Generator
 Handles account tagging and tag operations
 """
-import os
 import csv_utils
 
 

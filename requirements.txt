@@ -1,11 +1,6 @@
 customtkinter
 Pillow
 requests
-pymailtm
-faker
 tqdm
 colorama
-packaging
-pyinstaller
 openpyxl>=3.1.0
-APScheduler>=3.10.0

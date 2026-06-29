@@ -5,48 +5,51 @@ import os
 import queue
 import re
 import csv
+import time
 
-# Import backend modules
 import generate_accounts
 import signin_accounts
 import export_utils
 import tag_manager
 import csv_utils
+import megatools_helper
 from colorama import Fore
 from PIL import Image
+from tkinter import messagebox
 
 # Configure global appearance
 ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("dark-blue")  # Using built-in dark-blue for specific elements
+ctk.set_default_color_theme("dark-blue")
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
-    except Exception:
+    except AttributeError:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
 
 # --- Constants & Colors ---
-COLOR_PRIMARY = "#2cc985"      # Vibrant Green for primary actions
+COLOR_PRIMARY = "#2cc985"
 COLOR_PRIMARY_HOVER = "#23a16a"
 
-COLOR_SECONDARY = "#1f6aa5"    # Ocean Blue for secondary actions
+COLOR_SECONDARY = "#1f6aa5"
 COLOR_SECONDARY_HOVER = "#144870"
 
-COLOR_DANGER = "#c92c2c"       # Red for danger
+COLOR_DANGER = "#c92c2c"
 COLOR_DANGER_HOVER = "#962121"
 
-COLOR_BG_DARK = "#1a1a1a"      # Main Window BG
-COLOR_CARD_BG = "#2b2b2b"      # Card/Frame BG
+COLOR_BG_DARK = "#1a1a1a"
+COLOR_CARD_BG = "#2b2b2b"
 COLOR_TEXT_MAIN = "#ffffff"
 COLOR_TEXT_SUB = "#cccccc"
 
 FONT_MAIN = ("Roboto", 13)
 FONT_HEADER = ("Roboto Medium", 20)
 FONT_SUBHEADER = ("Roboto Medium", 15)
+
+MAX_THREADS = 8
 
 
 class MegaGenGUI(ctk.CTk):
@@ -56,11 +59,10 @@ class MegaGenGUI(ctk.CTk):
         self.title("Mega Account Generator GUI")
         self.geometry("900x600")
 
-        # Set icon
         try:
             self.iconbitmap(resource_path("logo.ico"))
-        except:
-            pass # Icon not found or format issue
+        except Exception as e:
+            print(f"Icon load error: {e}")
 
         self.configure(fg_color=COLOR_BG_DARK)
         
@@ -70,6 +72,14 @@ class MegaGenGUI(ctk.CTk):
 
         self.log_queue = queue.Queue()
         self.is_running = False
+
+        # --- Check megatools availability at startup ---
+        available, info = megatools_helper.is_megatools_available()
+        if not available:
+            self.after(100, lambda: messagebox.showwarning(
+                "megatools Not Found",
+                f"{info}\n\nAccount generation and sign-in will not work until megatools is installed."
+            ))
 
         # --- Sidebar (Left) ---
         self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
@@ -89,8 +99,7 @@ class MegaGenGUI(ctk.CTk):
                                          anchor="w", width=180, font=FONT_SUBHEADER)
         self.btn_nav_acc.grid(row=2, column=0, padx=10, pady=10)
 
-        # Logo at bottom
-        self.sidebar_frame.grid_rowconfigure(3, weight=1) # Spacer
+        self.sidebar_frame.grid_rowconfigure(3, weight=1)
         try:
             pil_image = Image.open(resource_path("logo.png"))
             self.logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(100, 100))
@@ -119,8 +128,9 @@ class MegaGenGUI(ctk.CTk):
         self.status_queue = queue.Queue()
         generate_accounts.set_status_callback(self.append_status)
         
-        # Start log poller
+        # Start log and status pollers
         self.after(100, self.poll_log_queue)
+        self.after(100, self.poll_status_queue)
 
     def show_generator(self):
         self.accounts_view.pack_forget()
@@ -131,7 +141,7 @@ class MegaGenGUI(ctk.CTk):
     def show_accounts(self):
         self.generator_view.pack_forget()
         self.accounts_view.pack(fill="both", expand=True)
-        self.accounts_view.load_accounts() # Auto reload
+        self.accounts_view.load_accounts()
         self.btn_nav_gen.configure(fg_color="transparent")
         self.btn_nav_acc.configure(fg_color=("gray75", "gray25"))
 
@@ -149,6 +159,10 @@ class MegaGenGUI(ctk.CTk):
                     self.generator_view.log_box.configure(state="normal")
                     clean_msg = re.sub(r'\x1b\[[0-9;]*m', '', str(msg))
                     self.generator_view.log_box.insert("end", clean_msg + "\n")
+                    # Cap log box at 500 lines to prevent memory/speed issues
+                    line_count = int(self.generator_view.log_box.index("end-1c").split(".")[0])
+                    if line_count > 500:
+                        self.generator_view.log_box.delete("1.0", f"{line_count - 500}.0")
                     self.generator_view.log_box.see("end")
                     self.generator_view.log_box.configure(state="disabled")
         except queue.Empty:
@@ -156,9 +170,23 @@ class MegaGenGUI(ctk.CTk):
         finally:
             self.after(100, self.poll_log_queue)
             
+    def poll_status_queue(self):
+        """Consume status updates from backend threads."""
+        try:
+            while True:
+                index, email, status = self.status_queue.get_nowait()
+                clean_status = re.sub(r'\x1b\[[0-9;]*m', '', str(status))
+                clean_email = re.sub(r'\x1b\[[0-9;]*m', '', str(email))
+                if self.generator_view.winfo_exists():
+                    self.generator_view.metrics_label.configure(
+                        text=f"Account {index}: {clean_email} - {clean_status}"
+                    )
+        except queue.Empty:
+            pass
+        finally:
+            self.after(100, self.poll_status_queue)
+
     def confirm_stop(self):
-        # Using a simple dialog to confirm
-        from tkinter import messagebox
         return messagebox.askyesno("Stop Process", "Are you sure you want to stop the current process?")
 
 # --- Generator View ---
@@ -168,7 +196,7 @@ class GeneratorView(ctk.CTkFrame):
         self.controller = controller
         
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1) # Log area expands
+        self.grid_rowconfigure(1, weight=1)
 
         # Settings Card
         self.settings_frame = ctk.CTkFrame(self, fg_color=COLOR_CARD_BG, corner_radius=10)
@@ -183,26 +211,55 @@ class GeneratorView(ctk.CTkFrame):
         self.password_var = ctk.StringVar(value="")
 
         self._create_input(self.settings_frame, 1, 0, "Accounts", self.num_accounts_var)
-        self._create_input(self.settings_frame, 1, 1, "Threads (Max 8)", self.num_threads_var)
+        self._create_input(self.settings_frame, 1, 1, f"Threads (Max {MAX_THREADS})", self.num_threads_var)
         self._create_input(self.settings_frame, 1, 2, "Common Password (Optional)", self.password_var)
+
+        # Proxy toggle + Webshare API key
+        self.proxy_var = ctk.BooleanVar(value=False)
+        self.proxy_checkbox = ctk.CTkCheckBox(
+            self.settings_frame, text="Use Proxies (bypass IP bans)",
+            variable=self.proxy_var, font=FONT_MAIN, text_color=COLOR_TEXT_SUB,
+            fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
+            command=self._on_proxy_toggle
+        )
+        self.proxy_checkbox.grid(row=1, column=3, padx=20, pady=10, sticky="w")
+        
+        self.proxy_status_label = ctk.CTkLabel(self.settings_frame, text="", font=("Roboto", 10), text_color="gray60")
+        self.proxy_status_label.grid(row=1, column=3, padx=20, pady=(35, 0), sticky="w")
+
+        # Webshare multi-key section
+        self.webshare_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        self.webshare_frame.grid(row=2, column=0, columnspan=4, padx=20, pady=(0, 5), sticky="ew")
+        
+        ws_row1 = ctk.CTkFrame(self.webshare_frame, fg_color="transparent")
+        ws_row1.pack(fill="x")
+        
+        ctk.CTkLabel(ws_row1, text="Webshare API Keys (10 proxies each):", font=("Roboto", 11), text_color=COLOR_TEXT_SUB).pack(side="left")
+        self.webshare_key_var = ctk.StringVar(value="")
+        self.webshare_entry = ctk.CTkEntry(ws_row1, textvariable=self.webshare_key_var, width=280, height=28, placeholder_text="Paste API key → Click Add")
+        self.webshare_entry.pack(side="left", padx=10)
+        ctk.CTkButton(ws_row1, text="Add", fg_color=COLOR_SECONDARY, width=50, height=28, command=self._add_webshare_key).pack(side="left")
+        ctk.CTkButton(ws_row1, text="Remove Last", fg_color="gray", width=80, height=28, command=self._remove_webshare_key).pack(side="left", padx=5)
+        self.webshare_status_label = ctk.CTkLabel(ws_row1, text="", font=("Roboto", 10), text_color="gray60")
+        self.webshare_status_label.pack(side="left", padx=10)
 
         # Action Buttons
         self.btn_gen = ctk.CTkButton(self.settings_frame, text="Start Generation", font=("Roboto", 14, "bold"),
                                      fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER, height=40,
                                      command=self.start_generation)
-        self.btn_gen.grid(row=2, column=0, columnspan=2, padx=20, pady=20, sticky="ew")
+        self.btn_gen.grid(row=3, column=0, columnspan=2, padx=20, pady=20, sticky="ew")
 
         self.btn_signin = ctk.CTkButton(self.settings_frame, text="Check Storage / Sign In", font=("Roboto", 14, "bold"),
                                         fg_color=COLOR_SECONDARY, hover_color=COLOR_SECONDARY_HOVER, height=40,
                                         command=self.start_signin)
-        self.btn_signin.grid(row=2, column=2, columnspan=2, padx=20, pady=20, sticky="ew")
+        self.btn_signin.grid(row=3, column=2, columnspan=2, padx=20, pady=20, sticky="ew")
 
         self.btn_stop = ctk.CTkButton(self.settings_frame, text="Stop", font=("Roboto", 14, "bold"),
                                       fg_color="gray", hover_color=COLOR_DANGER_HOVER, height=40,
                                       state="disabled", command=self.stop_process)
-        self.btn_stop.grid(row=3, column=0, columnspan=4, padx=20, pady=(0, 20), sticky="ew")
+        self.btn_stop.grid(row=4, column=0, columnspan=4, padx=20, pady=(0, 20), sticky="ew")
 
-        # Live Status Table (Replaces Log Box)
+        # Live Status Table
         self.log_frame = ctk.CTkFrame(self, fg_color=COLOR_CARD_BG, corner_radius=10)
         self.log_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         self.log_frame.grid_rowconfigure(1, weight=1)
@@ -214,7 +271,6 @@ class GeneratorView(ctk.CTkFrame):
         self.log_box.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
         self.log_box.configure(state="disabled")
 
-        # Metrics & Log Text (Mini log below table)
         self.metrics_label = ctk.CTkLabel(self.log_frame, text="Ready to start.", font=("Roboto", 12), text_color=COLOR_TEXT_SUB)
         self.metrics_label.grid(row=2, column=0, sticky="w", padx=20, pady=(10, 0))
 
@@ -228,15 +284,111 @@ class GeneratorView(ctk.CTkFrame):
         ctk.CTkLabel(frame, text=label_text, font=FONT_MAIN, text_color=COLOR_TEXT_SUB).pack(anchor="w", pady=(0, 5))
         ctk.CTkEntry(frame, textvariable=variable, height=35).pack(fill="x")
 
-    def start_generation(self):
-        if self.controller.is_running: return
+    def _add_webshare_key(self):
+        """Add a Webshare API key."""
+        api_key = self.webshare_key_var.get().strip()
+        if not api_key:
+            self.webshare_status_label.configure(text="Enter API key", text_color=COLOR_DANGER)
+            return
+        
+        self.webshare_status_label.configure(text="Adding...", text_color="gray60")
+        
+        def _add():
+            try:
+                from proxy_manager import proxy_manager
+                count = proxy_manager.add_webshare_key(api_key)
+                if count > 0:
+                    total = len(proxy_manager.all_webshare)
+                    self.controller.after(0, lambda: self.webshare_status_label.configure(
+                        text=f"+{count} proxies (total: {total})", text_color=COLOR_PRIMARY))
+                    self.controller.after(0, lambda: self.webshare_key_var.set(""))
+                    self.controller.after(0, lambda: self.proxy_var.set(True))
+                    self.controller.after(0, lambda: self._on_proxy_toggle())
+                else:
+                    self.controller.after(0, lambda: self.webshare_status_label.configure(
+                        text="Invalid key or duplicate", text_color=COLOR_DANGER))
+            except Exception as e:
+                self.controller.after(0, lambda: self.webshare_status_label.configure(
+                    text=f"Error: {str(e)[:30]}", text_color=COLOR_DANGER))
+        
+        threading.Thread(target=_add, daemon=True).start()
+
+    def _remove_webshare_key(self):
+        """Remove the last Webshare API key."""
+        try:
+            from proxy_manager import proxy_manager
+            if proxy_manager.accounts:
+                last = proxy_manager.accounts[-1]
+                proxy_manager.remove_webshare_key(last.api_key)
+                total = len(proxy_manager.all_webshare)
+                self.webshare_status_label.configure(
+                    text=f"Removed. Total: {total} proxies", text_color="gray60")
+            else:
+                self.webshare_status_label.configure(text="No keys to remove", text_color=COLOR_DANGER)
+        except ImportError:
+            pass
+
+    def _on_proxy_toggle(self):
+        """Enable/disable proxy rotation."""
+        try:
+            from proxy_manager import proxy_manager
+            if self.proxy_var.get():
+                # Check if Webshare is already connected
+                if proxy_manager.all_webshare:
+                    proxy_manager.enable()
+                    count = len(proxy_manager.all_webshare)
+                    status = f"Webshare: {count} proxies from {len(proxy_manager.accounts)} accounts"
+                    self.proxy_status_label.configure(text=status, text_color=COLOR_PRIMARY)
+                    return
+                
+                # Fall back to free proxies
+                self.proxy_status_label.configure(text="Finding free proxies...", text_color="gray60")
+                def _load():
+                    count = proxy_manager.refresh_free_proxies(max_test=20)
+                    status = f"{count} free proxies found"
+                    color = COLOR_PRIMARY if count > 0 else COLOR_DANGER
+                    self.controller.after(0, lambda: self.proxy_status_label.configure(text=status, text_color=color))
+                    if count > 0:
+                        proxy_manager.enable()
+                threading.Thread(target=_load, daemon=True).start()
+            else:
+                proxy_manager.disable()
+                self.proxy_status_label.configure(text="")
+        except ImportError:
+            self.proxy_status_label.configure(text="proxy_manager not found", text_color=COLOR_DANGER)
+
+    def _validate_inputs(self):
+        """Validate generation inputs. Returns (num, threads, password) or None on error."""
         try:
             num = int(self.num_accounts_var.get())
             threads = int(self.num_threads_var.get())
             password = self.password_var.get() or None
         except ValueError:
             self.controller.append_log("Error: Invalid number input.")
+            return None
+
+        if num < 1:
+            self.controller.append_log("Error: Number of accounts must be at least 1.")
+            return None
+
+        if threads < 1:
+            self.controller.append_log(f"Error: Thread count must be at least 1.")
+            return None
+
+        if threads > MAX_THREADS:
+            self.controller.append_log(f"Error: Thread count cannot exceed {MAX_THREADS} due to Mail.tm rate limits.")
+            return None
+
+        return num, threads, password
+
+    def start_generation(self):
+        if self.controller.is_running: return
+        
+        validated = self._validate_inputs()
+        if validated is None:
             return
+        
+        num, threads, password = validated
 
         # Reset stop flags
         generate_accounts.STOP_FLAG = False
@@ -246,7 +398,6 @@ class GeneratorView(ctk.CTkFrame):
         self._toggle_buttons(False)
         self.progress_bar.set(0)
         
-        # Pass password directly based on our previous fix
         threading.Thread(target=self._run_gen_thread, args=(num, threads, password), daemon=True).start()
 
     def start_signin(self):
@@ -274,27 +425,26 @@ class GeneratorView(ctk.CTkFrame):
         self.btn_gen.configure(state=s)
         self.btn_signin.configure(state=s)
         
-        # Stop button logic
-        if not state: # Running
+        if not state:
             self.btn_stop.configure(state="normal", text="STOP", fg_color=COLOR_DANGER)
-        else: # Idle
+        else:
             self.btn_stop.configure(state="disabled", text="Stop", fg_color="gray")
 
     def _run_gen_thread(self, total, threads, password):
         self.controller.append_log(f"Starting generation of {total} accounts...")
-        # Pass controller for thread-safe progress updates
         pbar = ProgressWrapper(self.progress_bar.set, total, self.controller)
         
         success_count = 0
+        fail_count = 0
         total_time = 0
         
         try:
             if threads > 1:
                 thread_list = []
                 result_queue = queue.Queue()
+                start_delay = max(3, 10 / threads)
                 
                 def thread_wrapper(idx, p, pw, q):
-                    # We pass 'idx' as index to new_account
                     res = generate_accounts.new_account(idx, p, pw)
                     q.put(res)
 
@@ -303,25 +453,26 @@ class GeneratorView(ctk.CTkFrame):
                     t = threading.Thread(target=thread_wrapper, args=(i, pbar, password, result_queue))
                     thread_list.append(t)
                     t.start()
-                    import time; time.sleep(0.5) # stagger
+                    time.sleep(start_delay)
                 
                 for t in thread_list: t.join()
                 
-                # Collect stats
                 while not result_queue.empty():
                     res = result_queue.get()
                     if res.get("success"): success_count += 1
+                    else: fail_count += 1
                     total_time += res.get("time", 0)
             else:
                 for i in range(total):
                     if generate_accounts.STOP_FLAG: break
                     res = generate_accounts.new_account(i, pbar, password)
                     if res.get("success"): success_count += 1
+                    else: fail_count += 1
                     total_time += res.get("time", 0)
             
             avg_time = (total_time / total) if total > 0 else 0
             
-            msg = f"Completed. Success: {success_count}/{total} | Avg Time: {avg_time:.2f}s"
+            msg = f"Done. Success: {success_count} | Failed: {fail_count} | Total: {total} | Avg: {avg_time:.1f}s"
             if generate_accounts.STOP_FLAG: msg += " (Stopped)"
             
             self.metrics_label.configure(text=msg, text_color=COLOR_PRIMARY if success_count > 0 else COLOR_TEXT_SUB)
@@ -340,8 +491,6 @@ class GeneratorView(ctk.CTkFrame):
                 self.controller.append_log("Error: accounts.csv not found.")
                 return
             
-            
-            # Simple line count for progress
             total = csv_utils.count_accounts()
             
             if total < 1:
@@ -362,14 +511,18 @@ class GeneratorView(ctk.CTkFrame):
             self._toggle_buttons(True)
 
 # --- Accounts View ---
+ACCOUNTS_PER_PAGE = 50
+
 class AccountsView(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
-        self.all_accounts = []  # Store all accounts for filtering
+        self.all_accounts = []
+        self.filtered_accounts = []
+        self.current_page = 0
         
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)  # Changed from 1 to 2
+        self.grid_rowconfigure(2, weight=1)
 
         # Header Card
         self.header_frame = ctk.CTkFrame(self, fg_color=COLOR_CARD_BG, corner_radius=10, height=60)
@@ -377,7 +530,6 @@ class AccountsView(ctk.CTkFrame):
         
         ctk.CTkLabel(self.header_frame, text="Stored Accounts", font=FONT_HEADER, text_color=COLOR_TEXT_MAIN).pack(side="left", padx=20, pady=15)
         
-        # Buttons frame
         btn_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
         btn_frame.pack(side="right", padx=20)
         
@@ -390,17 +542,15 @@ class AccountsView(ctk.CTkFrame):
         
         # Search & Filter Bar
         self.search_frame = ctk.CTkFrame(self, fg_color=COLOR_CARD_BG, corner_radius=10, height=60)
-        self.search_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 20))
+        self.search_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 10))
         
-        # Search entry
-        ctk.CTkLabel(self.search_frame, text="🔍", font=("Roboto", 18)).pack(side="left", padx=(20, 5))
+        ctk.CTkLabel(self.search_frame, text="Search:", font=("Roboto", 18)).pack(side="left", padx=(20, 5))
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", lambda *args: self.apply_filters())
         self.search_entry = ctk.CTkEntry(self.search_frame, placeholder_text="Search by email...", 
                                         textvariable=self.search_var, width=300)
         self.search_entry.pack(side="left", padx=5, pady=15)
         
-        # Filter dropdown
         ctk.CTkLabel(self.search_frame, text="Filter:", text_color=COLOR_TEXT_SUB).pack(side="left", padx=(20, 5))
         self.filter_var = ctk.StringVar(value="All")
         self.filter_dropdown = ctk.CTkOptionMenu(self.search_frame, variable=self.filter_var,
@@ -408,54 +558,62 @@ class AccountsView(ctk.CTkFrame):
                                                 command=lambda x: self.apply_filters(), width=120)
         self.filter_dropdown.pack(side="left", padx=5)
 
-    # List Area
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color=COLOR_CARD_BG, corner_radius=10)
         self.scroll_frame.grid(row=2, column=0, sticky="nsew")
+
+        # Pagination controls
+        self.page_frame = ctk.CTkFrame(self, fg_color="transparent", height=40)
+        self.page_frame.grid(row=3, column=0, sticky="ew", padx=0, pady=(5, 0))
+        
+        self.btn_prev = ctk.CTkButton(self.page_frame, text="< Prev", width=80,
+                                      fg_color=COLOR_SECONDARY, hover_color=COLOR_SECONDARY_HOVER,
+                                      command=self.prev_page, state="disabled")
+        self.btn_prev.pack(side="left", padx=5)
+        
+        self.page_label = ctk.CTkLabel(self.page_frame, text="", font=("Roboto", 12), text_color=COLOR_TEXT_SUB)
+        self.page_label.pack(side="left", padx=10)
+        
+        self.btn_next = ctk.CTkButton(self.page_frame, text="Next >", width=80,
+                                      fg_color=COLOR_SECONDARY, hover_color=COLOR_SECONDARY_HOVER,
+                                      command=self.next_page, state="disabled")
+        self.btn_next.pack(side="left", padx=5)
 
     def load_accounts(self):
         """Load all accounts from CSV"""
         for w in self.scroll_frame.winfo_children(): w.destroy()
         
-        # Safe read via utils
         rows = csv_utils.read_accounts()
             
         if not rows:
             ctk.CTkLabel(self.scroll_frame, text="No accounts found.", text_color=COLOR_TEXT_SUB).pack(pady=20)
             self.all_accounts = []
+            self.filtered_accounts = []
+            self._update_page_label()
             return
         
-        # Store all accounts
         self.all_accounts = rows
         
-        # Update filter dropdown with Tags
         base_filters = ["All", "Active", "Failed", "Disabled", "Unknown"]
         all_tags = tag_manager.TagManager.get_all_tags()
         
-        # Prefix tags to distinguish them or just section them
-        # We'll rely on the fact that status are specific words.
-        # If a tag matches a status, it might be ambiguous, but unlikely to be an issue for now.
-        # To be safe, we can check if selected value is in base_filters.
-        
         self.filter_dropdown.configure(values=base_filters + all_tags)
         
-        # Display accounts (will be filtered if search/filter active)
+        self.current_page = 0
         self.apply_filters()
     
     def apply_filters(self):
-        """Filter and display accounts based on search and filter criteria"""
-        for w in self.scroll_frame.winfo_children(): w.destroy()
-        
+        """Filter accounts and display current page"""
         if not self.all_accounts:
-            ctk.CTkLabel(self.scroll_frame, text="No accounts to display.", text_color=COLOR_TEXT_SUB).pack(pady=20)
+            self.filtered_accounts = []
+            self._render_page()
             return
         
         search_query = self.search_var.get().lower().strip()
         filter_status = self.filter_var.get()
         
-        # Define reserved status keywords
         status_keywords = ["All", "Active", "Failed", "Disabled", "Unknown"]
         
-        filtered = []
+        self.filtered_accounts = []
         for row in self.all_accounts:
             if not row:
                 continue
@@ -463,19 +621,14 @@ class AccountsView(ctk.CTkFrame):
             email = row[0].lower() if len(row) > 0 else ""
             status = row[4] if len(row) > 4 else "Unknown"
             
-            # Get tags for this account
-            # Row index 5 is tags (csv_utils normalization ensures this)
             tags_str = row[5] if len(row) > 5 else ""
             account_tags = [t.strip() for t in tags_str.split(',') if t.strip()]
             
-            # Apply search filter
             if search_query and search_query not in email:
                 continue
             
-            # Apply filter logic
             if filter_status != "All":
                 if filter_status in status_keywords:
-                    # It's a status filter
                     if filter_status == "Active" and status != "Active":
                         continue
                     elif filter_status == "Failed" and "Failed" not in status:
@@ -485,34 +638,71 @@ class AccountsView(ctk.CTkFrame):
                     elif filter_status == "Unknown" and status not in ["Unknown", ""]:
                         continue
                 else:
-                    # It's a TAG filter
-                    # If the selected filter is NOT in status_keywords, assume it's a tag
                     if filter_status not in account_tags:
                         continue
             
-            filtered.append(row)
+            self.filtered_accounts.append(row)
         
-        # Display filtered results
-        if filtered:
-            for row in filtered:
-                AccountRow(self.scroll_frame, row, self.load_accounts).pack(fill="x", padx=10, pady=5)
-        else:
-            ctk.CTkLabel(self.scroll_frame, text=f"No accounts match your search.", 
-                        text_color=COLOR_TEXT_SUB).pack(pady=20)
+        self.current_page = 0
+        self._render_page()
+    
+    def _render_page(self):
+        """Render only the current page of accounts."""
+        for w in self.scroll_frame.winfo_children():
+            w.destroy()
+        
+        if not self.filtered_accounts:
+            if self.all_accounts:
+                ctk.CTkLabel(self.scroll_frame, text="No accounts match your search.", 
+                            text_color=COLOR_TEXT_SUB).pack(pady=20)
+            else:
+                ctk.CTkLabel(self.scroll_frame, text="No accounts to display.", 
+                            text_color=COLOR_TEXT_SUB).pack(pady=20)
+            self._update_page_label()
+            return
+        
+        total_pages = max(1, (len(self.filtered_accounts) + ACCOUNTS_PER_PAGE - 1) // ACCOUNTS_PER_PAGE)
+        start = self.current_page * ACCOUNTS_PER_PAGE
+        end = min(start + ACCOUNTS_PER_PAGE, len(self.filtered_accounts))
+        page_rows = self.filtered_accounts[start:end]
+        
+        for row in page_rows:
+            AccountRow(self.scroll_frame, row, self.load_accounts).pack(fill="x", padx=10, pady=5)
+        
+        self._update_page_label()
+    
+    def _update_page_label(self):
+        total = len(self.filtered_accounts)
+        total_pages = max(1, (total + ACCOUNTS_PER_PAGE - 1) // ACCOUNTS_PER_PAGE)
+        self.page_label.configure(text=f"Page {self.current_page + 1}/{total_pages} ({total} accounts)")
+        
+        self.btn_prev.configure(state="normal" if self.current_page > 0 else "disabled")
+        self.btn_next.configure(state="normal" if self.current_page < total_pages - 1 else "disabled")
+    
+    def prev_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self._render_page()
+    
+    def next_page(self):
+        total_pages = max(1, (len(self.filtered_accounts) + ACCOUNTS_PER_PAGE - 1) // ACCOUNTS_PER_PAGE)
+        if self.current_page < total_pages - 1:
+            self.current_page += 1
+            self._render_page()
     
     def show_export_menu(self):
         """Show export format selection dialog"""
-        from tkinter import filedialog, messagebox
-        
         dialog = ExportDialog(self.winfo_toplevel(), self.controller)
-        
+    
     def show_import_menu(self):
         """Show import file selection dialog"""
-        from tkinter import filedialog, messagebox
+        from tkinter import filedialog
         
         filetypes = [
+            ("All supported", "*.json *.xlsx *.csv"),
             ("JSON files", "*.json"),
             ("Excel files", "*.xlsx"),
+            ("CSV files", "*.csv"),
             ("All files", "*.*")
         ]
         
@@ -525,19 +715,22 @@ class AccountsView(ctk.CTkFrame):
             return
         
         try:
-            # Detect format and import
             if filepath.endswith('.json'):
                 accounts = export_utils.import_from_json(filepath)
             elif filepath.endswith('.xlsx'):
                 accounts = export_utils.import_from_excel(filepath)
+            elif filepath.endswith('.csv'):
+                accounts = export_utils.import_from_csv(filepath)
             else:
-                messagebox.showerror("Error", "Unsupported file format")
+                messagebox.showerror("Error", "Unsupported file format. Use JSON, Excel, or CSV.")
                 return
             
-            # Confirm import
+            if not accounts:
+                messagebox.showwarning("No Accounts", "No valid accounts found in the file.")
+                return
+            
             if messagebox.askyesno("Confirm Import", 
                                   f"Import {len(accounts)} accounts? This will replace accounts.csv"):
-                # Write to CSV
                 csv_utils.write_accounts(accounts)
                 
                 messagebox.showinfo("Success", f"Imported {len(accounts)} accounts successfully!")
@@ -556,15 +749,14 @@ class AccountRow(ctk.CTkFrame):
         self.used = row_data[2] if len(row_data) > 2 else "?"
         self.free = row_data[3] if len(row_data) > 3 else "?"
 
-        self.grid_columnconfigure(0, weight=1) # Email expands
+        self.grid_columnconfigure(0, weight=1)
         self.pack_propagate(False)
-        self.configure(height=60) # Increased height for tags + buttons
+        self.configure(height=60)
 
         # Email & Tags
         info_frame = ctk.CTkFrame(self, fg_color="transparent")
         info_frame.grid(row=0, column=0, sticky="w", padx=15, pady=5)
         
-        # Determine color based on status
         email_color = "white"
         if self.status == "Disabled":
             email_color = "gray50"
@@ -575,7 +767,6 @@ class AccountRow(ctk.CTkFrame):
             
         ctk.CTkLabel(info_frame, text=self.email, font=("Roboto", 13, "bold"), text_color=email_color).pack(anchor="w")
         
-        # Tags display
         tags = tag_manager.TagManager.get_account_tags(self.email)
         tag_text = ""
         if tags:
@@ -585,16 +776,12 @@ class AccountRow(ctk.CTkFrame):
         if tag_text:
             ctk.CTkLabel(info_frame, text=tag_text, font=("Roboto", 10), text_color="gray70").pack(anchor="w")
 
-        # Status/Pass/Storage Info
-        # Status/Pass/Storage Info
-        # Robust storage display
         used_display = self.used if self.used and self.used != "?" else "N/A"
         free_display = self.free if self.free and self.free != "?" else "N/A"
         
         details = f"Pass: {self.password} | St: {self.status} | Used: {used_display}  Free: {free_display}"
         ctk.CTkLabel(self, text=details, font=("Roboto", 11), text_color="gray60", anchor="w").grid(row=1, column=0, padx=15, pady=(0, 5), sticky="w")
         
-        # Actions
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.grid(row=0, column=1, rowspan=2, padx=10)
 
@@ -603,7 +790,6 @@ class AccountRow(ctk.CTkFrame):
         self._make_btn(btn_frame, "Edit", self.edit_pass, "gray40", width=50)
         self._make_btn(btn_frame, "Tags", self.edit_tags, "gray40", width=50)
         
-        # Disable/Enable Toggle
         if self.status == "Disabled":
             self._make_btn(btn_frame, "Enable", self.toggle_status, COLOR_PRIMARY, width=60)
         else:
@@ -651,7 +837,6 @@ class EditPasswordDialog(ctk.CTkToplevel):
         self.resizable(False, False)
         self.attributes("-topmost", True)
         
-        # Center relative to parent
         parent_x = parent.winfo_x()
         parent_y = parent.winfo_y()
         parent_width = parent.winfo_width()
@@ -660,9 +845,6 @@ class EditPasswordDialog(ctk.CTkToplevel):
         x_pos = parent_x + (parent_width // 2) - (300 // 2)
         y_pos = parent_y + (parent_height // 2) - (150 // 2)
         self.geometry(f"300x150+{x_pos}+{y_pos}")
-
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
 
         ctk.CTkLabel(self, text="Enter new password:", font=("Roboto", 13)).pack(pady=(20, 10))
         
@@ -677,7 +859,6 @@ class EditPasswordDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn_frame, text="Cancel", fg_color="gray", width=80, command=self.destroy).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="Save", fg_color=COLOR_PRIMARY, width=80, command=self.save).pack(side="left", padx=5)
         
-        # Allow Enter key to save
         self.bind("<Return>", lambda event: self.save())
 
     def save(self):
@@ -712,7 +893,6 @@ class ExportDialog(ctk.CTkToplevel):
         self.resizable(False, False)
         self.attributes("-topmost", True)
         
-        #Center
         parent_x = parent.winfo_x()
         parent_y = parent.winfo_y()
         parent_width = parent.winfo_width()
@@ -722,7 +902,6 @@ class ExportDialog(ctk.CTkToplevel):
         y_pos = parent_y + (parent_height // 2) - (300 // 2)
         self.geometry(f"400x300+{x_pos}+{y_pos}")
         
-        # Content
         ctk.CTkLabel(self, text="Select Export Format", font=FONT_HEADER).pack(pady=(30, 20))
         
         self.format_var = ctk.StringVar(value="json")
@@ -732,7 +911,6 @@ class ExportDialog(ctk.CTkToplevel):
         ctk.CTkRadioButton(self, text="Excel (Formatted, Spreadsheet)", 
                           variable=self.format_var, value="excel").pack(pady=10)
         
-        # Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(pady=30)
         
@@ -742,11 +920,10 @@ class ExportDialog(ctk.CTkToplevel):
                      command=self.export_accounts).pack(side="left", padx=10)
     
     def export_accounts(self):
-        from tkinter import filedialog, messagebox
+        from tkinter import filedialog
         
         format_type = self.format_var.get()
         
-        # File dialog
         if format_type == "json":
             filetypes = [("JSON files", "*.json")]
             default_ext = ".json"
@@ -766,7 +943,6 @@ class ExportDialog(ctk.CTkToplevel):
         try:
             rows = csv_utils.read_accounts()
             
-            # Export
             if format_type == "json":
                 count = export_utils.export_to_json(rows, filepath)
             else:
@@ -790,7 +966,6 @@ class TagEditDialog(ctk.CTkToplevel):
         self.resizable(False, False)
         self.attributes("-topmost", True)
         
-        # Center
         parent_x = parent.winfo_x()
         parent_y = parent.winfo_y()
         parent_width = parent.winfo_width()
@@ -800,18 +975,14 @@ class TagEditDialog(ctk.CTkToplevel):
         y_pos = parent_y + (parent_height // 2) - (350 // 2)
         self.geometry(f"400x350+{x_pos}+{y_pos}")
         
-        # Get current tags
         self.current_tags = tag_manager.TagManager.get_account_tags(email)
         
-        # UI
         ctk.CTkLabel(self, text="Account Tags", font=FONT_HEADER).pack(pady=(20, 10))
         
-        # Current tags display
         self.tags_frame = ctk.CTkScrollableFrame(self, height=150)
         self.tags_frame.pack(fill="x", padx=20, pady=10)
         self.refresh_tags_display()
         
-        # Add new tag
         input_frame = ctk.CTkFrame(self, fg_color="transparent")
         input_frame.pack(fill="x", padx=20, pady=10)
         
@@ -822,7 +993,6 @@ class TagEditDialog(ctk.CTkToplevel):
         ctk.CTkButton(input_frame, text="Add", width=60, command=self.add_tag,
                      fg_color=COLOR_PRIMARY).pack(side="left")
         
-        # Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(pady=20)
         
@@ -842,10 +1012,10 @@ class TagEditDialog(ctk.CTkToplevel):
             tag_row = ctk.CTkFrame(self.tags_frame, fg_color="#333333")
             tag_row.pack(fill="x", pady=2)
             
-            ctk.CTkLabel(tag_row, text=f"🏷️ {tag}", font=("Roboto", 12),
+            ctk.CTkLabel(tag_row, text=f"[{tag}]", font=("Roboto", 12),
                         text_color="white").pack(side="left", padx=10, pady=5)
             
-            ctk.CTkButton(tag_row, text="✖", width=30, height=25,
+            ctk.CTkButton(tag_row, text="X", width=30, height=25,
                          command=lambda t=tag: self.remove_tag(t),
                          fg_color=COLOR_DANGER, hover_color="#C62828").pack(side="right", padx=5)
     

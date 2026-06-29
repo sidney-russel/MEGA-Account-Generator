@@ -158,6 +158,53 @@ def import_from_excel(filepath):
     return accounts
 
 
+def import_from_csv(filepath):
+    """
+    Import accounts from a plain CSV file.
+    Supports formats:
+      - email,password
+      - email,password,status
+      - Full 8-column format matching our CSV
+    
+    Args:
+        filepath: Path to CSV file
+        
+    Returns:
+        List of account rows
+    """
+    import csv
+    
+    accounts = []
+    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            
+            # Skip header rows
+            if row[0].strip().lower() in ('email', 'e-mail', 'mail', '#email'):
+                continue
+            
+            email = row[0].strip()
+            if '@' not in email:
+                continue
+            
+            password = row[1].strip() if len(row) > 1 else ""
+            storage_used = row[2].strip() if len(row) > 2 else "0 B"
+            free_storage = row[3].strip() if len(row) > 3 else "20 GB"
+            status = row[4].strip() if len(row) > 4 else "Active"
+            tags = row[5].strip() if len(row) > 5 else ""
+            mailtm_password = row[6].strip() if len(row) > 6 else ""
+            mailtm_id = row[7].strip() if len(row) > 7 else ""
+            
+            accounts.append([
+                email, password, storage_used, free_storage,
+                status, tags, mailtm_password, mailtm_id
+            ])
+    
+    return accounts
+
+
 def get_export_stats(accounts_data):
     """
     Get statistics for export summary.
@@ -189,7 +236,7 @@ def get_export_stats(accounts_data):
                 used_str = acc[2].replace("GiB", "").replace("GB", "").replace("MiB", "").replace("MB", "").strip()
                 if "GiB" in acc[2] or "GB" in acc[2]:
                     stats["used_storage_gb"] += float(used_str.split()[0]) if used_str else 0
-            except:
+            except (ValueError, IndexError):
                 pass
     
     stats["total_storage_gb"] = stats["total"] * 20  # Each account has 20GB

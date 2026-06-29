@@ -1,67 +1,214 @@
 """
 Helper module for locating bundled megatools executables.
 Works both in development and when bundled with PyInstaller.
+Cross-platform: supports Windows, Linux, and macOS.
+On Linux, megatools may be split into megareg, megadf, megals, etc.
 """
 import os
 import sys
 import subprocess
+import platform
+import shutil
+import logging
+
+logger = logging.getLogger(__name__)
+
+if platform.system() == 'Windows':
+    CREATION_FLAGS = subprocess.CREATE_NO_WINDOW
+else:
+    CREATION_FLAGS = 0
+
+MEGATOOLS_CMD_MAP = {
+    "reg": "megareg",
+    "df": "megadf",
+    "ls": "megals",
+    "dl": "megadl",
+    "put": "megaput",
+    "get": "megaget",
+    "mkdir": "megamkdir",
+    "rm": "megarm",
+    "cp": "megacopy",
+}
+
+def _find_unified_megatools():
+    """Try to find the unified megatools binary."""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+
+    system = platform.system()
+
+    if system == 'Windows':
+        bundled = os.path.join(base_path, "megatools", "megatools-1.11.3.20250401-win64", "megatools.exe")
+        if os.path.exists(bundled):
+            return bundled
+    elif system in ('Linux', 'Darwin'):
+        candidates = [
+            os.path.join(base_path, "megatools", "megatools"),
+            "/usr/bin/megatools",
+            "/usr/local/bin/megatools",
+            "/opt/homebrew/bin/megatools",
+        ]
+        for c in candidates:
+            if os.path.isfile(c) and os.access(c, os.X_OK):
+                return c
+
+    system_path = shutil.which("megatools")
+    if system_path:
+        return system_path
+
+    return None
+
+def _find_split_binary(subcmd):
+    """Find the split binary for a subcommand (e.g. 'reg' -> 'megareg')."""
+    split_name = MEGATOOLS_CMD_MAP.get(subcmd)
+    if not split_name:
+        return None
+
+    system_path = shutil.which(split_name)
+    if system_path:
+        return system_path
+
+    for base in ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]:
+        candidate = os.path.join(base, split_name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+
+    return None
 
 def get_megatools_path():
     """
     Get the path to the megatools executable.
+    Falls back to system PATH.
+    """
+    unified = _find_unified_megatools()
+    if unified:
+        return unified
+    return "megatools"
+
+def get_megatools_command(args, **kwargs):
+    """
+    Resolve the correct binary for a megatools subcommand.
+    
+    If unified megatools exists, returns [megatools, subcmd, ...rest].
+    If split binaries exist (Linux), returns [megareg, ...rest] or [megadf, ...rest].
+    
+    Args:
+        args: List like ['reg', '--scripted', '--register', ...] or ['df', '-u', ...]
+        **kwargs: Passed to run_megatools_command
     
     Returns:
-        str: Full path to megatools.exe, or just "megatools" if using system PATH
+        subprocess.CompletedProcess
     """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        # Running in normal Python environment
-        base_path = os.path.abspath(".")
+    unified = _find_unified_megatools()
     
-    # Check if bundled megatools exists
-    bundled_path = os.path.join(base_path, "megatools", "megatools-1.11.3.20250401-win64", "megatools.exe")
-    if os.path.exists(bundled_path):
-        return bundled_path
+    if unified and os.path.isfile(unified):
+        full_args = [unified] + args
+        return run_megatools_command_raw(full_args, **kwargs)
     
-    # Fallback to system PATH
-    return "megatools"
+    if args and args[0] in MEGATOOLS_CMD_MAP:
+        split_bin = _find_split_binary(args[0])
+        if split_bin:
+            full_args = [split_bin] + args[1:]
+            return run_megatools_command_raw(full_args, **kwargs)
+    
+    full_args = ["megatools"] + args
+    return run_megatools_command_raw(full_args, **kwargs)
 
 def run_megatools_command(args, **kwargs):
     """
-    Run a megatools command with the correct path.
+    Run a megatools command. Handles both unified and split binary layouts.
+    Supports proxy rotation if enabled.
     
     Args:
-        args: List of command arguments (e.g., ['df', '-u', email, '-p', password])
+        args: List of command arguments. First element is the subcommand
+              (e.g., ['reg', '--scripted', '--register', ...])
         **kwargs: Additional arguments to pass to subprocess.run
     
     Returns:
         subprocess.CompletedProcess
     """
-    megatools_exe = get_megatools_path()
-    full_args = [megatools_exe] + args
+    unified = _find_unified_megatools()
     
-    # Force UTF-8 encoding to prevent character display issues
+    if unified:
+        full_args = [unified] + args
+    elif args and args[0] in MEGATOOLS_CMD_MAP:
+        split_bin = _find_split_binary(args[0])
+        if split_bin:
+            full_args = [split_bin] + args[1:]
+        else:
+            full_args = ["megatools"] + args
+    else:
+        full_args = ["megatools"] + args
+    
+    return run_megatools_command_raw(full_args, **kwargs)
+
+def run_megatools_command_raw(full_args, **kwargs):
+    """Internal: run a fully resolved command."""
     if 'encoding' not in kwargs and 'universal_newlines' in kwargs:
         kwargs['encoding'] = 'utf-8'
     
-    timeout = kwargs.pop('timeout', 60) # Default 60s timeout
+    if 'creationflags' not in kwargs and CREATION_FLAGS:
+        kwargs['creationflags'] = CREATION_FLAGS
+    
+    timeout = kwargs.pop('timeout', 60)
 
     try:
-        if sys.platform == 'win32':
-             # CREATE_NO_WINDOW is already handled by caller or via creationflags in kwargs
-             # But we can enforce it if needed, though usually caller sets it.
-             # subprocess.run handles basic execution.
-             pass
-             
         return subprocess.run(full_args, **kwargs, timeout=timeout)
     except subprocess.TimeoutExpired:
-        # Create a dummy CompletedProcess object to represent failure
-        # This prevents the app from crashing but signals the failure
         return subprocess.CompletedProcess(
             args=full_args,
             returncode=1,
             stdout="",
             stderr=f"Error: Command timed out after {timeout} seconds."
         )
+    except FileNotFoundError:
+        logger.error(f"megatools binary not found: {full_args[0]}")
+        return subprocess.CompletedProcess(
+            args=full_args,
+            returncode=1,
+            stdout="",
+            stderr=f"Error: '{full_args[0]}' not found. Install megatools: sudo apt-get install megatools"
+        )
+
+def is_megatools_available():
+    """
+    Check if megatools binary is available and executable.
+    
+    Returns:
+        tuple: (bool, str) - (available, path_or_error_message)
+    """
+    unified = _find_unified_megatools()
+    if unified:
+        try:
+            result = subprocess.run(
+                [unified, "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                creationflags=CREATION_FLAGS if platform.system() == 'Windows' else 0,
+            )
+            if result.returncode == 0:
+                return True, unified
+            else:
+                return False, f"megatools at '{unified}' returned error code {result.returncode}"
+        except Exception as e:
+            return False, f"Error checking megatools: {e}"
+    
+    for subcmd in ['reg', 'df', 'ls']:
+        split_bin = _find_split_binary(subcmd)
+        if split_bin:
+            try:
+                result = subprocess.run(
+                    [split_bin, "--version"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                )
+                if result.returncode == 0:
+                    return True, f"Split binaries at: {os.path.dirname(split_bin)}"
+            except Exception:
+                pass
+    
+    return False, "megatools not found. Install: sudo apt-get install megatools"

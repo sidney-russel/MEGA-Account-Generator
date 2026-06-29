@@ -2,3 +2,7 @@ __pycache__/
 debug.log
 accounts.csv
 *.pyc
+generation_log.txt
+accounts.csv
+debug.log
+proxy_config.json
