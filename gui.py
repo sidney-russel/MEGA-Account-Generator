@@ -297,7 +297,6 @@ class GeneratorView(ctk.CTkFrame):
         
         def _add():
             try:
-                from proxy_manager import proxy_manager
                 count = proxy_manager.add_webshare_key(api_key)
                 if count > 0:
                     total = len(proxy_manager.all_webshare)
@@ -318,7 +317,6 @@ class GeneratorView(ctk.CTkFrame):
     def _remove_webshare_key(self):
         """Remove the last Webshare API key."""
         try:
-            from proxy_manager import proxy_manager
             if proxy_manager.accounts:
                 last = proxy_manager.accounts[-1]
                 proxy_manager.remove_webshare_key(last.api_key)
@@ -333,7 +331,6 @@ class GeneratorView(ctk.CTkFrame):
     def _on_proxy_toggle(self):
         """Enable/disable proxy rotation."""
         try:
-            from proxy_manager import proxy_manager
             if self.proxy_var.get():
                 # Check if Webshare is already connected
                 if proxy_manager.all_webshare:
