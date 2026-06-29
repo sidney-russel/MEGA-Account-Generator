@@ -29,14 +29,13 @@ jobs:
           CTK_PATH=$(python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))")
           echo "path=$CTK_PATH" >> $GITHUB_OUTPUT
 
-      - name: Download megatools for Windows
+      - name: Download megatools for Windows (64-bit)
         shell: bash
         run: |
           mkdir -p megatools
-          BASE="https://github.com/nickvdp/megatools-binaries/raw/master/megatools-1.10.3-win32"
-          for tool in megareg megadf megals megacopy megamkdir megarm megadl megaget megaput; do
-            curl -sL "$BASE/$tool.exe" -o "megatools/$tool.exe"
-          done
+          curl -sL "https://xff.cz/megatools/builds/builds/megatools-1.11.5.20250706-win64.zip" -o megatools-win64.zip
+          unzip -o megatools-win64.zip -d /tmp/megatools-win64
+          cp /tmp/megatools-win64/megatools-1.11.5.20250706-win64/megatools.exe megatools/
           echo "Downloaded megatools:"
           ls megatools/
 
