@@ -39,20 +39,25 @@ def _find_unified_megatools():
 
     system = platform.system()
 
+    # Check bundled megatools directory (various structures)
+    candidates = []
     if system == 'Windows':
-        bundled = os.path.join(base_path, "megatools", "megatools-1.11.3.20250401-win64", "megatools.exe")
-        if os.path.exists(bundled):
-            return bundled
-    elif system in ('Linux', 'Darwin'):
+        candidates = [
+            os.path.join(base_path, "megatools", "megatools.exe"),
+            os.path.join(base_path, "megatools", "megatools-1.11.3.20250401-win64", "megatools.exe"),
+            os.path.join(base_path, "megatools-1.11.3.20250401-win64", "megatools.exe"),
+        ]
+    else:
         candidates = [
             os.path.join(base_path, "megatools", "megatools"),
             "/usr/bin/megatools",
             "/usr/local/bin/megatools",
             "/opt/homebrew/bin/megatools",
         ]
-        for c in candidates:
-            if os.path.isfile(c) and os.access(c, os.X_OK):
-                return c
+    
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
 
     system_path = shutil.which("megatools")
     if system_path:
@@ -65,6 +70,20 @@ def _find_split_binary(subcmd):
     split_name = MEGATOOLS_CMD_MAP.get(subcmd)
     if not split_name:
         return None
+
+    # Check PyInstaller bundle directory
+    try:
+        meipass = sys._MEIPASS
+        bundled = os.path.join(meipass, "megatools", f"{split_name}.exe")
+        if os.path.isfile(bundled):
+            return bundled
+    except AttributeError:
+        pass
+
+    # Check local megatools directory
+    local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "megatools", f"{split_name}.exe")
+    if os.path.isfile(local):
+        return local
 
     system_path = shutil.which(split_name)
     if system_path:

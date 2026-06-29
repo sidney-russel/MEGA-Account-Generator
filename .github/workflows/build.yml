@@ -29,12 +29,24 @@ jobs:
           CTK_PATH=$(python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))")
           echo "path=$CTK_PATH" >> $GITHUB_OUTPUT
 
+      - name: Download megatools for Windows
+        shell: bash
+        run: |
+          mkdir -p megatools
+          BASE="https://github.com/nickvdp/megatools-binaries/raw/master/megatools-1.10.3-win32"
+          for tool in megareg megadf megals megacopy megamkdir megarm megadl megaget megaput; do
+            curl -sL "$BASE/$tool.exe" -o "megatools/$tool.exe"
+          done
+          echo "Downloaded megatools:"
+          ls megatools/
+
       - name: Build EXE
         run: |
           python -m PyInstaller --noconsole --onefile `
             --add-data "${{ steps.ctk.outputs.path }};customtkinter/" `
             --add-data "logo.ico;." `
             --add-data "logo.png;." `
+            --add-data "megatools;megatools" `
             --hidden-import "PIL._tkinter_finder" `
             --hidden-import "babel.numbers" `
             --hidden-import "openpyxl" `
@@ -64,17 +76,17 @@ jobs:
           name: MEGA Account Generator v2.0
           body: |
             ## What's New
+            - Bundled megatools (no extra install needed)
             - Multi-account Webshare proxy rotation (10 free proxies per account)
             - Direct mail.tm API (replaces buggy pymailtm)
             - CSV import support
             - Linux build script
             - Improved keep-alive
             - Thread-safe CSV
-            - Comprehensive README
             
             ## Usage
             1. Download MEGA-Generator.exe
-            2. Run it — no Python needed
+            2. Run it — no Python or megatools install needed
             3. Enter accounts count, password, click Generate
           files: dist/MEGA-Generator.exe
         env:
