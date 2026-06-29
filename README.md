@@ -1,427 +1,156 @@
 <div align="center">
-
-**English** | [Português (Brasil)](https://github.com/byPancra/MEGA-Account-Generator-GUI/tree/lang-pt-BR) | [Español](https://github.com/byPancra/MEGA-Account-Generator-GUI/tree/lang-es) | [日本語](https://github.com/byPancra/MEGA-Account-Generator-GUI/tree/lang-ja) | [繁體中文](https://github.com/byPancra/MEGA-Account-Generator-GUI/tree/lang-zh-TW) | [简体中文](https://github.com/byPancra/MEGA-Account-Generator-GUI/tree/lang-zh-CN)
-
-</div>
-<br>
-
-<div align="center">
-
-  ![Mega Account Generator GUI](./img/readme-icon.png)
-
-  <h1 align="center">Mega Account Generator GUI</h1>
+  <img src="./logo.png" width="120" alt="Logo">
+  <h1>MEGA Account Generator</h1>
+  <p>Bulk generate MEGA.nz accounts with proxy rotation, keep-alive, and full account management.</p>
   
-  **The ultimate tool for automating MEGA.nz account creation and management.**
+  [![Build](https://github.com/sidney-russel/MEGA-Account-Generator/actions/workflows/build.yml/badge.svg)](https://github.com/sidney-russel/MEGA-Account-Generator/actions)
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue)](https://python.org)
+  [![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
   
-  *Generate, Manage, Tag, and Export your accounts with a professional-grade interface.*
-
-  [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
-  [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](./LICENSE)
-  [![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)]()
-
-  [Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Proxy Setup](#-proxy-setup-webshare) • [Keep-Alive](#-keep-alive-prevent-inactivity-deletion) • [FAQ](#-faq)
-
+  [Download .exe](https://github.com/sidney-russel/MEGA-Account-Generator/releases/latest) • [Quick Start](#quick-start) • [Proxy Setup](#proxy-setup) • [Keep-Alive](#keep-alive) • [CLI](#cli-usage)
 </div>
 
 ---
 
-## Overview
+## What This Does
 
-**Mega Account Generator GUI** is a robust, desktop-grade application designed for power users who need to generate and manage [MEGA.nz](https://mega.nz) accounts in bulk. Built with **Modern Python** (CustomTkinter) and **Thread-Safe Architecture**, it ensures reliability even when processing hundreds of accounts.
+1. Creates temporary emails via mail.tm
+2. Registers MEGA.nz accounts using those emails
+3. Saves credentials to CSV
+4. Keeps accounts alive with periodic sign-ins
+5. Rotates IPs via Webshare proxies to avoid bans
 
-![Demo](./img/intro2.gif)
+## Quick Start
 
----
+### Windows (no Python needed)
+Download [MEGA-Generator.exe](https://github.com/sidney-russel/MEGA-Account-Generator/releases/latest) and run it.
 
-## Features
-
-### Core Generation
-*   **High-Speed Multi-Threading**: Generate up to 8 accounts simultaneously.
-*   **Smart Rate Limiting**: Intelligent delays and retry logic to bypass Mail.tm restrictions.
-*   **Free Proxy Rotation**: Automatically rotates IPs for email creation using Webshare (10 free proxies per account).
-
-### Advanced Management
-*   **Tagging System**: Organize accounts with custom tags (e.g., `Personal`, `Backup`, `Client-A`).
-*   **Search & Filter**: Find accounts by Email, Status (`Active`, `Disabled`, `Failed`), or Tags.
-*   **Keep-Alive**: Automated sign-in to prevent account deletion due to inactivity.
-*   **Storage Check**: Auto-update used/free storage quotas for all accounts.
-*   **Bulk Operations**: Disable specific accounts to exclude them from bulk operations.
-
-### Data Freedom
-*   **Professional Export**: Export to **Excel (.xlsx)** with formatting or **JSON** for programmatic use.
-*   **Import**: Import from **JSON**, **Excel**, or **CSV** files.
-*   **Clipboard Integration**: One-click copy for emails and passwords.
-
-### Security & Reliability
-*   **Thread-Safe CSV**: Prevents data corruption during concurrent writes.
-*   **Crash Recovery**: "Stop" button gracefully halts operations, preserving data integrity.
-
----
-
-## Installation
-
-### Option A: Standalone Executable (Recommended)
-
-No Python or external tools needed.
-
-**Windows:**
-1.  Download `MEGA-Generator.exe` from [Releases](https://github.com/byPancra/Mega-Account-Generator-GUI/releases).
-2.  Run the executable.
-
-**Linux:**
-1.  Download `MEGA-Generator` from [Releases](https://github.com/byPancra/Mega-Account-Generator-GUI/releases).
-2.  Make executable: `chmod +x MEGA-Generator`
-3.  Run: `./MEGA-Generator`
-
-### Option B: Running from Source
-
-#### Linux (Ubuntu/Debian)
-
+### Linux
 ```bash
-# 1. Install system dependencies
-sudo apt update
-sudo apt install python3 python3-pip python3-venv megatools
-
-# 2. Clone the repository
-git clone https://github.com/byPancra/Mega-Account-Generator-GUI.git
-cd Mega-Account-Generator-GUI
-
-# 3. Create virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
-
-# 4. Install Python dependencies
+sudo apt install megatools
+git clone https://github.com/sidney-russel/MEGA-Account-Generator.git
+cd MEGA-Account-Generator
 pip install -r requirements.txt
-
-# 5. Run the application
 python3 gui.py
 ```
 
-#### Linux (Arch/Manjaro)
-
+### Build It Yourself
 ```bash
-# 1. Install system dependencies
-sudo pacman -S python python-pip megatools
-
-# 2-5. Same as Ubuntu steps 2-5 above
-```
-
-#### Linux (Fedora/RHEL)
-
-```bash
-# 1. Install system dependencies
-sudo dnf install python3 python3-pip megatools
-
-# 2-5. Same as Ubuntu steps 2-5 above
-```
-
-#### Windows
-
-```powershell
-# 1. Install Python 3.8+ from python.org (check "Add to PATH")
-
-# 2. Install Megatools
-#    Download from https://megatools.megous.com/ or use: choco install megatools
-
-# 3. Clone and setup
-git clone https://github.com/byPancra/Mega-Account-Generator-GUI.git
-cd Mega-Account-Generator-GUI
-pip install -r requirements.txt
-
-# 4. Run
-python gui.py
-```
-
-#### macOS
-
-```bash
-# 1. Install dependencies
-brew install python3 megatools
-
-# 2-5. Same as Linux steps 2-5 above
-```
-
-### Option C: Build Standalone Binary
-
-**Linux:**
-```bash
-chmod +x build.sh
+# Linux
 ./build.sh
-# Binary: dist/MEGA-Generator
-```
 
-**Windows:**
-```cmd
+# Windows
 build.bat
-:: Binary: dist\MEGA-Generator.exe
 ```
 
----
+## How Many Accounts Can I Make?
 
-## Usage
+Depends on your proxy setup:
 
-### Generating Accounts
+| Setup | Accounts |
+|-------|----------|
+| No proxies (direct) | ~50-100 per IP |
+| 10 Webshare proxies (1 account) | ~500-1,000 |
+| 50 Webshare proxies (5 accounts) | ~2,500-5,000 |
+| 100+ Webshare proxies | 5,000+ |
 
-1.  Open the application.
-2.  Set the number of **Accounts** and **Threads** (max 8).
-3.  (Optional) Set a **Common Password** for all accounts.
-4.  (Optional) Enable **Use Proxies** and add Webshare API keys for IP rotation.
-5.  Click **Start Generation**.
-6.  Credentials are saved to `accounts.csv` automatically.
+MEGA blocks datacenter IPs for registration — proxies only help with mail.tm email creation.
 
-### Managing Accounts
+## Proxy Setup
 
-Navigate to the **Stored Accounts** tab:
-*   **Search**: Type an email to filter instantly.
-*   **Filter**: Use the dropdown to see only `Active`, `Disabled`, or `Failed` accounts.
-*   **Edit**: Click "Edit" to change a saved password or manage Tags.
-*   **Copy**: Quick buttons to copy credentials to clipboard.
-*   **Pagination**: Navigate through pages (50 accounts per page).
+Each free Webshare account gives **10 HTTP/SOCKS5 proxies**. Create multiple accounts to build a big proxy pool.
 
-### CLI Usage
+1. Sign up at [webshare.io](https://webshare.io) (free, no credit card)
+2. Dashboard → API Keys → Create Key
+3. In the tool, paste key → click **Add**
+4. Repeat for more accounts: 5 accounts = 50 proxies, 10 accounts = 100 proxies
 
+Keys are saved to `proxy_config.json` — auto-loads on restart.
+
+## Keep-Alive
+
+MEGA deletes inactive accounts. Run keep-alive weekly to prevent this.
+
+**GUI:** Click "Check Storage / Sign In" in the Stored Accounts tab.
+
+**CLI:**
 ```bash
-# Generate 3 accounts (default)
-python3 generate_accounts.py
-
-# Generate 50 accounts with 5 threads
-python3 generate_accounts.py -n 50 -t 5
-
-# Set a specific password for all accounts
-python3 generate_accounts.py -n 10 -p "MySecretPass123!"
-
-# Keep-Alive check (sign in to all accounts)
 python3 signin_accounts.py
 ```
 
-**Arguments for generate_accounts.py:**
+**Cron (auto weekly):**
+```bash
+0 2 * * 0 cd /path/to/MEGA-Account-Generator && python3 signin_accounts.py >> keepalive.log 2>&1
+```
+
+## CLI Usage
+
+```bash
+# Generate 50 accounts, 5 threads, same password
+python3 generate_accounts.py -n 50 -t 5 -p "MyPassword123"
+
+# Keep-alive check
+python3 signin_accounts.py
+```
+
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-n`, `--number` | Number of accounts to create | 3 |
-| `-t`, `--threads` | Number of concurrent threads (1-8) | 3 |
-| `-p`, `--password` | Common password for all accounts | Random |
+| `-n` | Number of accounts | 3 |
+| `-t` | Threads (max 8) | 3 |
+| `-p` | Password for all accounts | random |
 
-### Import/Export
+## Import / Export
 
-**Export:**
-1.  Click **Export** in the top right.
-2.  Select format: **JSON** (raw data) or **Excel** (formatted spreadsheet).
-3.  Choose save location.
+**Export:** JSON or Excel (formatted with color-coded status).
 
-**Import:**
-1.  Click **Import** in the Accounts view.
-2.  Select a file: **JSON**, **Excel (.xlsx)**, or **CSV**.
-3.  Confirm the import.
-
-**CSV Import Format:**
+**Import:** JSON, Excel, or CSV. CSV format:
 ```csv
 email,password
-user1@example.com,mypassword123
-user2@example.com,anotherpass456
+user1@example.com,mypass123
+user2@example.com,mypass456
 ```
-
-Or full format matching `accounts.csv`:
-```csv
-email,password,storage_used,free_storage,status,tags,mailtm_password,mailtm_id
-user@example.com,mypass,0 B,20 GB,Active,,, 
-```
-
----
-
-## Proxy Setup (Webshare)
-
-Proxies are used **only for mail.tm email creation** (MEGA blocks all proxy IPs). This lets you bypass IP bans when creating emails.
-
-### How It Works
-
-1.  **Webshare** gives 10 free HTTP/SOCKS5 proxies per account (1GB/mo bandwidth).
-2.  Create multiple Webshare accounts → aggregate all proxies into one pool.
-3.  The tool rotates through all proxies when creating mail.tm emails.
-
-### Setup
-
-1.  Go to [webshare.io](https://webshare.io) and sign up (free, no credit card).
-2.  In the dashboard, go to **API Keys** → **Create API Key**.
-3.  Copy the key.
-4.  In the GUI, paste the key in the **Webshare API Keys** field and click **Add**.
-5.  Repeat for more accounts:
-    *   1 account = 10 proxies
-    *   5 accounts = 50 proxies
-    *   10 accounts = 100 proxies
-6.  Enable the **Use Proxies** checkbox.
-
-### Adding Keys via CLI
-
-API keys are saved to `proxy_config.json`. You can also edit this file directly:
-```json
-{
-  "webshare_api_keys": [
-    "your-api-key-1",
-    "your-api-key-2",
-    "your-api-key-3"
-  ]
-}
-```
-
-### Free Proxy Fallback
-
-If no Webshare keys are added, the tool automatically fetches from free proxy lists (~10% work rate). Not recommended for serious use.
-
----
-
-## Keep-Alive (Prevent Inactivity Deletion)
-
-MEGA deletes accounts that haven't been accessed for a long time. The **Keep-Alive** feature prevents this by signing into each account periodically.
-
-### How It Works
-
-1.  Signs into each account using `megatools ls`.
-2.  Updates storage quota (used/free).
-3.  Marks failed accounts as `Login Failed`.
-4.  Skips `Disabled` accounts.
-
-### Running Keep-Alive
-
-**Via GUI:**
-1.  Go to the **Stored Accounts** tab.
-2.  Click **Check Storage / Sign In**.
-3.  Wait for all accounts to be processed.
-
-**Via CLI:**
-```bash
-python3 signin_accounts.py
-```
-
-### Recommended Schedule
-
-| Accounts | Frequency |
-|----------|-----------|
-| 1-50 | Weekly |
-| 50-200 | Every 3-4 days |
-| 200+ | Every 2 days |
-
-**Tip:** Set up a cron job for automatic keep-alive:
-```bash
-# Run keep-alive every Sunday at 2 AM
-0 2 * * 0 cd /path/to/Mega-Account-Generator-GUI && python3 signin_accounts.py >> keepalive.log 2>&1
-```
-
----
 
 ## File Structure
 
 ```
-MEGA-Account-Generator-GUI/
-├── gui.py                 # Main GUI application
-├── generate_accounts.py   # Account generation logic
-├── signin_accounts.py     # Keep-alive / sign-in
-├── mailtm_client.py       # Direct mail.tm API (replaces pymailtm)
-├── proxy_manager.py       # Multi-account Webshare proxy rotation
-├── megatools_helper.py    # Cross-platform megatools wrapper
-├── csv_utils.py           # Thread-safe CSV operations
+├── gui.py                 # GUI application
+├── generate_accounts.py   # Account generation
+├── signin_accounts.py     # Keep-alive
+├── mailtm_client.py       # mail.tm API client
+├── proxy_manager.py       # Webshare proxy rotation
+├── megatools_helper.py    # Megatools wrapper
+├── csv_utils.py           # Thread-safe CSV
 ├── export_utils.py        # JSON/Excel/CSV import/export
-├── tag_manager.py         # Account tagging system
-├── accounts.csv           # Account database (auto-created)
-├── proxy_config.json      # Webshare API keys (auto-created)
-├── requirements.txt       # Python dependencies
-├── build.sh               # Linux build script
-├── build.bat              # Windows build script
-├── logo.ico               # Application icon
-├── logo.png               # Application logo
-└── README.md              # This file
+├── tag_manager.py         # Account tagging
+├── build.sh               # Linux build
+├── build.bat              # Windows build
+└── accounts.csv           # Your accounts (auto-created)
 ```
-
----
 
 ## FAQ
 
-<details>
-<summary><strong>Why am I limited to 8 threads?</strong></summary>
-The temporary email provider (Mail.tm) has strict rate limits. Exceeding 8 concurrent threads significantly increases the chance of IP bans or failed generations.
-</details>
+**Why max 8 threads?**
+mail.tm rate limits. More threads = more bans.
 
-<details>
-<summary><strong>What does "Check Storage / Sign In" do?</strong></summary>
-It performs a "Keep-Alive" check. It signs into your accounts using `megatools`, updates storage quotas, and signals to MEGA that the accounts are active, preventing deletion.
-</details>
+**Accounts.csv not found?**
+Auto-created on first run.
 
-<details>
-<summary><strong>Where are my accounts saved?</strong></summary>
-All data is stored locally in `accounts.csv` in the application directory. You can also export this data using the Export feature.
-</details>
-
-<details>
-<summary><strong>I see "Megatools not found" error.</strong></summary>
-If running from source, ensure `megatools` is installed and in your system PATH:
-
+**megatools not found?**
 ```bash
-# Ubuntu/Debian
-sudo apt install megatools
-
-# Verify installation
-which megareg
+sudo apt install megatools    # Debian/Ubuntu
+sudo pacman -S megatools      # Arch
+brew install megatools         # macOS
 ```
 
-If using the executable, this is handled automatically.
-</details>
-
-<details>
-<summary><strong>How many accounts can I generate?</strong></summary>
-Depends on your proxy setup:
-- **No proxies**: ~50-100 per IP before mail.tm bans
-- **10 Webshare proxies**: ~500-1000 accounts
-- **50 Webshare proxies**: ~2500-5000 accounts
-- **100+ Webshare proxies**: 5000+ accounts
-
-MEGA itself blocks all proxy IPs, so MEGA registration always uses your real IP.
-</details>
-
-<details>
-<summary><strong>Can I import accounts from another tool?</strong></summary>
-Yes. Use the Import button to load JSON, Excel, or CSV files. The CSV import supports:
-- `email,password` format
-- Full 8-column format matching `accounts.csv`
-</details>
-
-<details>
-<summary><strong>How do I prevent accounts from being deleted?</strong></summary>
-Run the Keep-Alive feature weekly (or more often for large collections). See the [Keep-Alive](#-keep-alive-prevent-inactivity-deletion) section for cron job setup.
-</details>
-
-<details>
-<summary><strong>Does this work on headless Linux servers?</strong></summary>
-Yes. For servers without a display, use Xvfb:
+**Headless Linux server?**
 ```bash
-sudo apt install xvfb
 xvfb-run python3 gui.py
 ```
-Or use the CLI commands directly (no GUI needed):
-```bash
-python3 generate_accounts.py -n 50 -t 5
-python3 signin_accounts.py
-```
-</details>
-
----
 
 ## Disclaimer
 
-This tool is created for **educational and testing purposes only**. Using this software to abuse third-party services, bypass restrictions, or violate terms of service (ToS) of MEGA.nz or Mail.tm is strictly prohibited. The developer assumes no responsibility for misuse.
-
----
-
-## Acknowledgements
-
-*   Based on the original work by [f-o/MEGA-Account-Generator](https://github.com/f-o/MEGA-Account-Generator).
-*   GUI Components by [TomSchimansky/CustomTkinter](https://github.com/TomSchimansky/CustomTkinter).
-*   Enhanced and Maintained by [byPancra](https://github.com/byPancra).
-
----
+For educational and testing purposes only. Don't abuse MEGA or mail.tm services.
 
 ## License
 
-Distributed under the **MIT License**. See [LICENSE](LICENSE) for details.
-
-<div align="center">
-  <sub>Developed with love by <a href="https://github.com/byPancra">byPancra</a></sub>
-</div>
+MIT
