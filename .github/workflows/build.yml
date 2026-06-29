@@ -45,6 +45,8 @@ jobs:
             --hidden-import "requests" `
             --hidden-import "colorama" `
             --hidden-import "tqdm" `
+            --hidden-import "faker" `
+            --hidden-import "faker.providers" `
             --icon "logo.ico" `
             --name "MEGA-Generator" `
             gui.py

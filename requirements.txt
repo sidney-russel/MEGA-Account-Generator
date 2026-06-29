@@ -1,6 +1,7 @@
 customtkinter
 Pillow
 requests
+faker
 tqdm
 colorama
 openpyxl>=3.1.0
