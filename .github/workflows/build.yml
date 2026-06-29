@@ -42,7 +42,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          python -m PyInstaller --noconsole --onefile `
+          python -m PyInstaller --noconfirm --onefile `
             --add-data "${{ steps.ctk.outputs.path }};customtkinter/" `
             --add-data "logo.ico;." `
             --add-data "logo.png;." `
@@ -59,6 +59,13 @@ jobs:
             --hidden-import "tqdm" `
             --hidden-import "faker" `
             --hidden-import "faker.providers" `
+            --hidden-import "proxy_manager" `
+            --hidden-import "mailtm_client" `
+            --hidden-import "megatools_helper" `
+            --hidden-import "csv_utils" `
+            --hidden-import "export_utils" `
+            --hidden-import "tag_manager" `
+            --hidden-import "tkinter.filedialog" `
             --icon "logo.ico" `
             --name "MEGA-Generator" `
             gui.py
@@ -72,21 +79,22 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0
-          name: MEGA Account Generator v2.0
+          tag_name: v2.1
+          name: MEGA Account Generator v2.1
           body: |
-            ## What's New
-            - Bundled megatools (no extra install needed)
-            - Multi-account Webshare proxy rotation (10 free proxies per account)
-            - Direct mail.tm API (replaces buggy pymailtm)
-            - CSV import support
-            - Linux build script
-            - Improved keep-alive
-            - Thread-safe CSV
+            ## What's New in v2.1
+            - Fixed: megatools bundled inside .exe (no install needed)
+            - Fixed: proxy_manager module now detected by PyInstaller
+            - Fixed: proxy_config.json saves next to .exe (not temp dir)
+            - Fixed: debug.log writes next to .exe
+            - Fixed: Windows font fallback (Segoe UI instead of Roboto)
+            - Fixed: tkinter.filedialog now properly included
+            - Fixed: all module imports resolved at top level
+            - Fixed: platform-aware error messages
             
             ## Usage
             1. Download MEGA-Generator.exe
-            2. Run it — no Python or megatools install needed
+            2. Run it — everything is bundled
             3. Enter accounts count, password, click Generate
           files: dist/MEGA-Generator.exe
         env:

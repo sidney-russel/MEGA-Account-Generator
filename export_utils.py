@@ -172,8 +172,6 @@ def import_from_csv(filepath):
     Returns:
         List of account rows
     """
-    import csv
-    
     accounts = []
     with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
         reader = csv.reader(f)

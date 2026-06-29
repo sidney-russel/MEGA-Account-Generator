@@ -89,10 +89,11 @@ def _find_split_binary(subcmd):
     if system_path:
         return system_path
 
-    for base in ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]:
-        candidate = os.path.join(base, split_name)
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
+    if platform.system() != 'Windows':
+        for base in ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]:
+            candidate = os.path.join(base, split_name)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
 
     return None
 
@@ -184,11 +185,15 @@ def run_megatools_command_raw(full_args, **kwargs):
         )
     except FileNotFoundError:
         logger.error(f"megatools binary not found: {full_args[0]}")
+        if platform.system() == 'Windows':
+            hint = "Download from https://megatools.megous.com or place megatools.exe in the megatools/ folder."
+        else:
+            hint = "Install megatools: sudo apt-get install megatools"
         return subprocess.CompletedProcess(
             args=full_args,
             returncode=1,
             stdout="",
-            stderr=f"Error: '{full_args[0]}' not found. Install megatools: sudo apt-get install megatools"
+            stderr=f"Error: '{full_args[0]}' not found. {hint}"
         )
 
 def is_megatools_available():

@@ -15,9 +15,13 @@ CREATION_FLAGS = megatools_helper.CREATION_FLAGS
 # Initialize colorama
 init(autoreset=True)
 
-# Configure Logging
+# Configure Logging - use exe directory when bundled
+if getattr(sys, 'frozen', False):
+    _log_dir = os.path.dirname(sys.executable)
+else:
+    _log_dir = os.path.dirname(os.path.abspath(__file__))
 logging.basicConfig(
-    filename='debug.log',
+    filename=os.path.join(_log_dir, 'debug.log'),
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'

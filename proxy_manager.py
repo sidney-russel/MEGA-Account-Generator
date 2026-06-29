@@ -9,13 +9,20 @@ import time
 import logging
 import threading
 import os
+import sys
 import json
 
 logger = logging.getLogger(__name__)
 
 TEST_URL = "https://api.mail.tm/domains"
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxy_config.json")
 WEBSHARE_API = "https://proxy.webshare.io/api/v2"
+
+# Use exe directory when frozen, source directory otherwise
+if getattr(sys, 'frozen', False):
+    _config_dir = os.path.dirname(sys.executable)
+else:
+    _config_dir = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(_config_dir, "proxy_config.json")
 
 
 class WebshareAccount:

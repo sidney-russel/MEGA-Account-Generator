@@ -6,6 +6,7 @@ import queue
 import re
 import csv
 import time
+import platform
 
 import generate_accounts
 import signin_accounts
@@ -13,9 +14,10 @@ import export_utils
 import tag_manager
 import csv_utils
 import megatools_helper
+import proxy_manager
 from colorama import Fore
 from PIL import Image
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 
 # Configure global appearance
 ctk.set_appearance_mode("Dark")
@@ -45,9 +47,9 @@ COLOR_CARD_BG = "#2b2b2b"
 COLOR_TEXT_MAIN = "#ffffff"
 COLOR_TEXT_SUB = "#cccccc"
 
-FONT_MAIN = ("Roboto", 13)
-FONT_HEADER = ("Roboto Medium", 20)
-FONT_SUBHEADER = ("Roboto Medium", 15)
+FONT_MAIN = ("Segoe UI", 13) if platform.system() == "Windows" else ("Roboto", 13)
+FONT_HEADER = ("Segoe UI Semibold", 20) if platform.system() == "Windows" else ("Roboto Medium", 20)
+FONT_SUBHEADER = ("Segoe UI Semibold", 15) if platform.system() == "Windows" else ("Roboto Medium", 15)
 
 MAX_THREADS = 8
 
@@ -696,8 +698,6 @@ class AccountsView(ctk.CTkFrame):
     
     def show_import_menu(self):
         """Show import file selection dialog"""
-        from tkinter import filedialog
-        
         filetypes = [
             ("All supported", "*.json *.xlsx *.csv"),
             ("JSON files", "*.json"),
@@ -920,8 +920,6 @@ class ExportDialog(ctk.CTkToplevel):
                      command=self.export_accounts).pack(side="left", padx=10)
     
     def export_accounts(self):
-        from tkinter import filedialog
-        
         format_type = self.format_var.get()
         
         if format_type == "json":

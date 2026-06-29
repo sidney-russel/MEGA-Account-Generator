@@ -8,6 +8,7 @@ import random
 import string
 import logging
 import time
+import sys
 
 API_BASE = "https://api.mail.tm"
 logger = logging.getLogger(__name__)
@@ -29,28 +30,34 @@ def _generate_unique_address():
     return ''.join(random.choices(chars, k=length))
 
 
+def _get_proxy_manager():
+    """Get proxy_manager module safely."""
+    if 'proxy_manager' in sys.modules:
+        return sys.modules['proxy_manager'].proxy_manager
+    try:
+        import proxy_manager as pm
+        return pm.proxy_manager
+    except ImportError:
+        return None
+
+
 def _get_proxies():
     """Get current proxy dict from proxy_manager if enabled."""
-    try:
-        from proxy_manager import proxy_manager
-        if proxy_manager.enabled:
-            proxy = proxy_manager.get_proxy()
-            if proxy:
-                return {"http": proxy, "https": proxy}
-    except ImportError:
-        pass
+    pm = _get_proxy_manager()
+    if pm and pm.enabled:
+        proxy = pm.get_proxy()
+        if proxy:
+            return {"http": proxy, "https": proxy}
     return None
 
 
 def _mark_proxy_failed():
     """Mark current proxy as failed."""
-    try:
-        from proxy_manager import proxy_manager
+    pm = _get_proxy_manager()
+    if pm and pm.enabled:
         proxies = _get_proxies()
-        if proxies and proxy_manager.enabled:
-            proxy_manager.mark_failed(proxies.get("http", ""))
-    except ImportError:
-        pass
+        if proxies:
+            pm.mark_failed(proxies.get("http", ""))
 
 
 def _get_domain(session):

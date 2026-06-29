@@ -26,9 +26,13 @@ CREATION_FLAGS = megatools_helper.CREATION_FLAGS
 # Initialize colorama
 init(autoreset=True)
 
-# Configure Logging
+# Configure Logging - use exe directory when bundled
+if getattr(sys, 'frozen', False):
+    _log_dir = os.path.dirname(sys.executable)
+else:
+    _log_dir = os.path.dirname(os.path.abspath(__file__))
 logging.basicConfig(
-    filename='debug.log',
+    filename=os.path.join(_log_dir, 'debug.log'),
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
@@ -247,7 +251,7 @@ class MegaAccount:
 
         self.verify_command = self.verify_command.replace("@LINK@", links[0])
 
-        cmd_parts = shlex.split(self.verify_command)
+        cmd_parts = self.verify_command.split()
         # Strip any leading binary name/path (megatools, /usr/bin/megareg, etc.)
         if cmd_parts and (cmd_parts[0] in ("megatools", "megareg") or "megatools" in cmd_parts[0] or "megareg" in cmd_parts[0]):
             cmd_parts = cmd_parts[1:]

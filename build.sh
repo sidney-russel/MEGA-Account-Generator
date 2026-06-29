@@ -29,23 +29,6 @@ if [ -z "$CTK_PATH" ]; then
 fi
 echo "CustomTkinter: $CTK_PATH"
 
-# Find megatools path
-MEGA_DIR=""
-for dir in /usr/bin /usr/local/bin /usr/sbin; do
-    if [ -f "$dir/megareg" ]; then
-        MEGA_DIR="$dir"
-        break
-    fi
-done
-
-if [ -z "$MEGA_DIR" ]; then
-    echo "WARNING: megatools not found in standard paths."
-    echo "  Install: sudo apt install megatools"
-    echo "  The built binary will need megatools in PATH."
-    MEGA_DIR="/usr/bin"
-fi
-echo "Megatools: $MEGA_DIR"
-
 echo ""
 echo "Building standalone binary..."
 echo ""
@@ -64,6 +47,15 @@ python3 -m PyInstaller --noconfirm --onefile \
     --hidden-import "requests" \
     --hidden-import "colorama" \
     --hidden-import "tqdm" \
+    --hidden-import "faker" \
+    --hidden-import "faker.providers" \
+    --hidden-import "proxy_manager" \
+    --hidden-import "mailtm_client" \
+    --hidden-import "megatools_helper" \
+    --hidden-import "csv_utils" \
+    --hidden-import "export_utils" \
+    --hidden-import "tag_manager" \
+    --hidden-import "tkinter.filedialog" \
     --icon "logo.ico" \
     --name "MEGA-Generator" \
     gui.py
